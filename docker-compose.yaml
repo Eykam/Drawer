@@ -1,0 +1,50 @@
+version: "3.9"
+services:
+  nginx-file:
+    image: nginx:latest
+    volumes:
+      - ./gateway/nginx/conf.d:/etc/nginx/conf.d
+    ports:
+      - 93:93
+    networks:
+      - file-network
+    depends_on:
+      - FileServer
+      - FileClient
+    deploy:
+      restart_policy:
+        condition: always
+
+  FileClient:
+    image: file-client-image
+    container_name: file-client-container
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile.local
+    expose:
+      - 3000
+    volumes:
+      - ./frontend/client/src:/app/src
+    command: npm start
+    networks:
+      - file-network
+    depends_on:
+      - FileServer
+
+  FileServer:
+    image: file-server-image
+    container_name: file-server-container
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile.local
+    expose:
+      - 8000
+    volumes:
+      - ./backend:/app/
+    command: npm run dev
+    networks:
+      - file-network
+
+networks:
+  file-network:
+    driver: bridge

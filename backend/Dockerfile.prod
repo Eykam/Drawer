@@ -1,0 +1,19 @@
+FROM node:latest
+
+WORKDIR /app
+
+COPY ./package.json ./package.json
+COPY ./package-lock.json ./package-lock.json
+COPY ./nodemon.json ./nodemon.json
+COPY ./tsconfig.json ./tsconfig.json
+
+RUN yes | npm install -g npm
+
+#DONT FORGET TO CHANGE FLAG BACK TO PROD
+RUN yes | npm install --production=false
+
+COPY ./src ./src
+
+RUN npm run build
+
+CMD ["npm", "run", "start"]
