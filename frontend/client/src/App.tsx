@@ -1,27 +1,23 @@
-import { useEffect } from "react";
 import "@/styles/globals.css";
+import { TailwindIndicator } from "./components/tailwind-indicator";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
-import useUserStore from "./store/userStore";
-import FileBrowser from "./components/file-browser";
-import { TailwindIndicator } from "./components/tailwind-indicator";
-import Login from "./pages/Login";
-import Home from "./pages/Home";
+import FileBrowser from "@/app/FileBrowser/page";
+import Login from "@/app/Login/page";
+
+import { useCheckAuthenticated } from "./app/FileBrowser/_lib/user/useCheckAuthenticated";
 
 function App() {
-  const { loggedIn, checkAuth } = useUserStore();
+  const { status, data: authenticated } = useCheckAuthenticated({});
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  if (status === "pending") return <></>;
 
   return (
     <div className="h-[100dvh] w-screen flex flex-col overflow-hidden">
       <Header />
-      {/* {loggedIn ? <FileBrowser /> : <Login />} */}
-      {loggedIn ? <Home /> : <Login />}
-
+      {authenticated ? <FileBrowser /> : <Login />}
       <Footer />
+
       <TailwindIndicator />
     </div>
   );

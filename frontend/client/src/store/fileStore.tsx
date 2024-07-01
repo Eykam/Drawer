@@ -76,7 +76,7 @@ interface BearState {
 }
 
 const useFileSystem = create<BearState>((set, get) => ({
-  viewMode: ViewModes.Grid,
+  viewMode: ViewModes.List,
   setViewMode: (viewMode: ViewModes) => set({ viewMode }),
   selected: new Set(),
   addSelected: (selected) =>

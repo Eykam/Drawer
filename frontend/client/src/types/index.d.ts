@@ -1,8 +1,9 @@
 export type FileInfo = {
-  fileName: string;
+  name: string;
   size: number;
-  fileType: string;
+  type: string;
   date: string;
+  imgSrc?: string;
 };
 
 export type NavItemProps = HTMLAttributes<HTMLAnchorElement> & {

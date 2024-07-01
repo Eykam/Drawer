@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, MenuItem, Menu } from "@mui/material";
-import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer";
 import Modal from "@mui/material/Modal";
 import Paper from "@mui/material/Paper";
 import TextField from "@mui/material/TextField";
@@ -8,40 +7,17 @@ import useFileSystem from "@/store/fileStore";
 import InfiniteList from "@/components/infinite-list";
 import { File as StoreFile } from "@/store/fileStore";
 import ContextMenuHelpers from "@/lib/contextMenuHelpers";
-import useTableHelpers from "@/lib/useTableHelpers";
+import useTableHelpers from "@/app/FileBrowser/_lib/useTableHelpers";
 import DownloadIcon from "@mui/icons-material/Download";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import { IconButton } from "@mui/material";
+import Document from "./_components/document-viewer";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 
 const FILES_URL = "/api/";
 const FILES_UPLOAD = "/api/upload";
-
-const Document = ({
-  selectedDocs,
-  filename,
-}: {
-  selectedDocs: Blob[];
-  filename: string;
-}) => {
-  return (
-    <DocViewer
-      style={{
-        width: window.innerWidth < 1200 ? "100%" : "49%",
-        height: window.innerWidth < 1400 ? "65vh" : "70vh",
-        overflowY: "hidden",
-        borderRadius: "5px",
-      }}
-      documents={selectedDocs.map((file) => ({
-        uri: window.URL.createObjectURL(file),
-        fileName: filename,
-      }))}
-      pluginRenderers={DocViewerRenderers.filter(
-        (docRender) => !docRender.fileTypes.includes("doc")
-      )}
-    />
-  );
-};
 
 const Home = () => {
   const {
@@ -79,6 +55,11 @@ const Home = () => {
   const newName = useRef<HTMLInputElement | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const currentDocument = useMemo(
+    () => <Document selectedDocs={selectedDocs} filename={currFilename} />,
+    [selectedDocs]
+  );
 
   const handleContextMenuGen = (event: React.MouseEvent) => {
     event.preventDefault();
@@ -623,9 +604,8 @@ const Home = () => {
                 </div>
                 {files}
               </h3>
-              {selectedDocs.length > 0 && (
-                <Document selectedDocs={selectedDocs} filename={currFilename} />
-              )}
+
+              {currentDocument}
             </div>
           </Paper>
         ) : (
@@ -683,12 +663,7 @@ const Home = () => {
                   justifyContent: "center",
                 }}
               >
-                {selectedDocs.length > 0 && (
-                  <Document
-                    selectedDocs={selectedDocs}
-                    filename={currFilename}
-                  />
-                )}
+                {currentDocument}
               </div>
 
               <h3

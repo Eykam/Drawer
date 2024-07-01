@@ -4,7 +4,7 @@ import SouthIcon from "@mui/icons-material/South";
 import ListItem from "./list-item";
 import { Checkbox } from "@mui/material";
 import { File } from "@/store/fileStore";
-import useTableHelpers from "@/lib/useTableHelpers";
+import useTableHelpers from "@/app/FileBrowser/_lib/useTableHelpers";
 
 const InfiniteList = ({
   FileList,

@@ -1,4 +1,4 @@
-import NavItem from "./ui/nav-item";
+import NavItem from "@/components/ui/nav-item";
 import { navItems } from "@/config/nav";
 
 export default function Sidebar() {

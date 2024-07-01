@@ -3,9 +3,9 @@ import MobileFileBrowser from "./mobile-file-browser";
 
 export default function FileBrowser() {
   return (
-    <div className="h-[88%] overflow-y-auto">
+    <main className="h-[88%] overflow-y-auto">
       <MobileFileBrowser />
       <DesktopFileBrowser />
-    </div>
+    </main>
   );
 }

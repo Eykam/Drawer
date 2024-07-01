@@ -1,13 +1,12 @@
-import useUserStore from "@/store/userStore";
 import Icons from "./Icons";
 import { Button } from "./ui/button";
 import MobileNav from "./mobile-nav";
 import { useState } from "react";
-import { navItems } from "@/config/nav";
+import { useLogout } from "@/app/FileBrowser/_lib/user/useLogout";
 
 export default function Header() {
-  const { logOut } = useUserStore();
   const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
+  const logout = useLogout().mutate;
 
   return (
     <header className="bg-background border-b flex items-center justify-between px-4 h-[7%] shrink-0">
@@ -19,7 +18,7 @@ export default function Header() {
         </a>
 
         <button
-          className="flex items-center space-x-2 md:hidden"
+          className="flex items-center space-x-2 lg:hidden"
           onClick={() => setShowMobileMenu(!showMobileMenu)}
         >
           {showMobileMenu ? <Icons.CloseIcon /> : <Icons.MountainIcon />}
@@ -31,7 +30,7 @@ export default function Header() {
         )}
       </div>
 
-      <Button variant="ghost" size="icon" onClick={() => logOut()}>
+      <Button variant="ghost" size="icon" onClick={() => logout()}>
         <Icons.LogOutIcon className="w-5 h-5 text-red-500" />
         <span className="sr-only">Log Out</span>
       </Button>

@@ -11,7 +11,7 @@ export default function MobileNav({ visible, toggleMenu }: MobileNavProps) {
   return (
     <div
       className={
-        "fixed inset-0 top-[6%] z-50 grid h-[calc(100vh-4rem)] grid-flow-row auto-rows-max overflow-auto p-6 pb-32 shadow-md animate-in slide-in-from-bottom-80 md:hidden w-full"
+        "fixed inset-0 top-[6%] z-50 grid h-[calc(100vh-4rem)] grid-flow-row auto-rows-max overflow-auto p-6 pb-32 shadow-md animate-in slide-in-from-bottom-80 lg:hidden w-full"
       }
     >
       <div className="relative z-20 grid gap-6 bg-popover p-4 text-popover-foreground shadow-md border-2 border-black rounded-lg">

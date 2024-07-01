@@ -1,25 +1,20 @@
 import { HTMLAttributes } from "react";
-import Icons from "./Icons";
-import { Button } from "./ui/button";
+import Icons from "@/components/Icons";
+import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "./ui/context-menu";
+} from "@/components/ui/context-menu";
+import { FileInfo } from "@/types";
 
-type FileCardProps = HTMLAttributes<HTMLDivElement> & {
-  fileName: string;
-  size: number;
-  fileType: string;
-  date: string;
-  imgSrc?: string;
-};
+type FileCardProps = HTMLAttributes<HTMLDivElement> & FileInfo;
 
 export default function FileCard({
-  fileName,
+  name,
   size,
-  fileType,
+  type,
   date,
   imgSrc,
 }: FileCardProps) {
@@ -29,7 +24,7 @@ export default function FileCard({
         <a href="#" className="block relative">
           <img
             src={imgSrc || "/placeholder.svg"}
-            alt={"File thumbnail -" + fileName}
+            alt={"File thumbnail -" + name}
             width={300}
             height={200}
             className="w-full h-40 object-cover group-hover:opacity-80 transition-opacity"
@@ -51,11 +46,11 @@ export default function FileCard({
         </a>
         <div className="p-4 space-y-2 text-muted-foreground text-sm">
           <div className="flex items-center justify-between">
-            <p className="text-primary font-semibold">{fileName}</p>
+            <p className="text-primary font-semibold">{name}</p>
             <p className="text-primary font-semibold">{size} MB</p>
           </div>
           <div className="flex items-center justify-between">
-            <p>{fileType}</p>
+            <p>{type}</p>
             <p>{date}</p>
           </div>
         </div>

@@ -10,13 +10,13 @@ export default function DesktopFileBrowser() {
   return (
     <div className="hidden lg:block size-full">
       <ResizablePanelGroup direction="horizontal" className="min-h-[200px]">
-        <ResizablePanel defaultSize={0.15}>
+        <ResizablePanel defaultSize={15}>
           <div className="flex h-full items-center justify-center p-6">
             <Sidebar />
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={0.85}>
+        <ResizablePanel defaultSize={85}>
           <FilesContainer />
         </ResizablePanel>
       </ResizablePanelGroup>

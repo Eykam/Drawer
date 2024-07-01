@@ -5,136 +5,137 @@ import {
   TableHead,
   TableBody,
   TableCell,
-} from "./ui/table";
+} from "@/components/ui/table";
+import { FileInfo } from "@/types";
 import { LucideIcon } from "lucide-react";
 
 export default function ListView() {
-  const files = [
+  const files: FileInfo[] = [
     {
       name: "Document.docx",
       type: "Document",
-      size: "120 KB",
-      modified: "2023-06-15",
+      size: 120,
+      date: "2023-06-15",
     },
     {
       name: "Presentation.pptx",
       type: "Presentation",
-      size: "3.2 MB",
-      modified: "2023-05-30",
+      size: 3.2,
+      date: "2023-05-30",
     },
     {
       name: "Image.jpg",
       type: "Image",
-      size: "2.1 MB",
-      modified: "2023-04-20",
+      size: 2.1,
+      date: "2023-04-20",
     },
     {
       name: "Spreadsheet.xlsx",
       type: "Spreadsheet",
-      size: "500 KB",
-      modified: "2023-06-01",
+      size: 500,
+      date: "2023-06-01",
     },
     {
       name: "PDF.pdf",
       type: "PDF",
-      size: "1.5 MB",
-      modified: "2023-03-10",
+      size: 1.5,
+      date: "2023-03-10",
     },
     {
       name: "Video.mp4",
       type: "Video",
-      size: "25 MB",
-      modified: "2023-02-28",
+      size: 25,
+      date: "2023-02-28",
     },
     {
       name: "Audio.mp3",
       type: "Audio",
-      size: "8 MB",
-      modified: "2023-01-15",
+      size: 8,
+      date: "2023-01-15",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
     {
       name: "Archive.zip",
       type: "Archive",
-      size: "4.2 MB",
-      modified: "2023-06-05",
+      size: 4.2,
+      date: "2023-06-05",
     },
   ];
 
@@ -167,7 +168,7 @@ export default function ListView() {
                 {file.size}
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                {file.modified}
+                {file.date}
               </TableCell>
             </TableRow>
           ))}

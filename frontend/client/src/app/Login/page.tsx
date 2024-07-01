@@ -10,19 +10,18 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import React, { useState } from "react";
-import useUserStore from "@/store/userStore";
+import { useLogin } from "@/app/FileBrowser/_lib/user/useLogin";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-
-  const { logIn } = useUserStore();
+  const login = useLogin().mutate;
 
   const handleLogin = async (
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>
   ) => {
     e.preventDefault();
-    await logIn(username, password);
+    login({ username, password });
   };
 
   return (

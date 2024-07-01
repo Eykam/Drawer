@@ -5,7 +5,7 @@ import {
   BreadcrumbLink,
   BreadcrumbSeparator,
   BreadcrumbPage,
-} from "./ui/breadcrumb";
+} from "@/components/ui/breadcrumb";
 
 export default function DirectoryBreadcrumb() {
   return (

@@ -1,5 +1,5 @@
-import Icons from "./Icons";
-import { Input } from "./ui/input";
+import Icons from "@/components/Icons";
+import { Input } from "@/components/ui/input";
 
 export default function Search() {
   return (
