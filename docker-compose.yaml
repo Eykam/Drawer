@@ -19,12 +19,14 @@ services:
     image: file-client-image
     container_name: file-client-container
     build:
-      context: ./frontend
-      dockerfile: ./Dockerfile.local
+      context: .
+      dockerfile: ./frontend/Dockerfile.local
     expose:
       - 3000
     volumes:
       - ./frontend/client/src:/app/src
+      # Mount backend at the path tsconfig expects relative to /app (which is frontend/client)
+      - ./backend:/backend:ro
     command: npm start
     networks:
       - file-network
@@ -41,10 +43,63 @@ services:
       - 8000
     volumes:
       - ./backend:/app/
-    command: npm run dev
+    command: bun --watch src/index.ts
     networks:
       - file-network
+    depends_on:
+      - tika
+      - weaviate
+
+  tika:
+    image: apache/tika:latest
+    container_name: tika-container
+    expose:
+      - 9998
+    networks:
+      - file-network
+    deploy:
+      restart_policy:
+        condition: always
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:latest
+    container_name: weaviate-container
+    expose:
+      - 8080
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-transformers'
+      ENABLE_MODULES: 'text2vec-transformers'
+      TRANSFORMERS_INFERENCE_API: 'http://t2v-transformers:8080'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    networks:
+      - file-network
+    depends_on:
+      - t2v-transformers
+    deploy:
+      restart_policy:
+        condition: always
+
+  t2v-transformers:
+    image: cr.weaviate.io/semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    container_name: t2v-transformers-container
+    expose:
+      - 8080
+    environment:
+      ENABLE_CUDA: '0'
+    networks:
+      - file-network
+    deploy:
+      restart_policy:
+        condition: always
 
 networks:
   file-network:
     driver: bridge
+
+volumes:
+  weaviate_data:

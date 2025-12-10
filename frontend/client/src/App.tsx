@@ -8,7 +8,7 @@ import Login from "@/app/Login/page";
 import { useCheckAuthenticated } from "./app/FileBrowser/_lib/user/useCheckAuthenticated";
 
 function App() {
-  const { status, data: authenticated } = useCheckAuthenticated({});
+  const { status, data: authenticated } = useCheckAuthenticated();
 
   if (status === "pending") return <></>;
 

@@ -1,146 +1,98 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { columns } from "./columns";
-import { DataTable } from "./data-table";
-import { FileInfo } from "@/types";
-
-function getData(): FileInfo[] {
-  // Fetch data from your API here.
-  return [
-    {
-      name: "Document.docx",
-      type: "Document",
-      size: 120,
-      date: "2023-06-15",
-    },
-    {
-      name: "Presentation.pptx",
-      type: "Presentation",
-      size: 3.2,
-      date: "2023-05-30",
-    },
-    {
-      name: "Image.jpg",
-      type: "Image",
-      size: 2.1,
-      date: "2023-04-20",
-    },
-    {
-      name: "Spreadsheet.xlsx",
-      type: "Spreadsheet",
-      size: 500,
-      date: "2023-06-01",
-    },
-    {
-      name: "PDF.pdf",
-      type: "PDF",
-      size: 1.5,
-      date: "2023-03-10",
-    },
-    {
-      name: "Video.mp4",
-      type: "Video",
-      size: 25,
-      date: "2023-02-28",
-    },
-    {
-      name: "Audio.mp3",
-      type: "Audio",
-      size: 8,
-      date: "2023-01-15",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-    {
-      name: "Archive.zip",
-      type: "Archive",
-      size: 4.2,
-      date: "2023-06-05",
-    },
-  ];
-}
+import { DataTable, TableActions } from "./data-table";
+import { useGetDirectory } from "@/app/FileBrowser/_lib/filesystem/useGetDirectory";
+import { useDownloadFile } from "@/app/FileBrowser/_lib/filesystem/useDownloadFiles";
+import { useGetFile } from "@/app/FileBrowser/_lib/filesystem/useGetFile";
+import useFileStore from "@/store/fileStore";
 
 export default function ListView() {
-  const data = useMemo(() => getData(), []);
+  const { currentPath, setCurrentPath, setSelectedContext, setOpenRename, setOpenDeleteModal, setOpenModal, setCurrFilename, setSelectedDocs } = useFileStore();
+  const downloadMutation = useDownloadFile();
+  const getFileMutation = useGetFile();
+
+  const currentPathString =
+    currentPath.length > 0 ? currentPath.join("/") + "/" : "";
+
+  const { data: files = [], isLoading, error } = useGetDirectory(currentPathString);
+
+  // Transform FileItem to match DataTable column accessors
+  const tableData = useMemo(() => {
+    return files.map((file) => {
+      const name = file.name ?? "";
+      const isDir = file.mimeType === "dir";
+
+      // Extract display name from path
+      let displayName = name;
+      if (isDir) {
+        // For directories like "folder/", extract "folder"
+        const parts = name.split("/").filter(Boolean);
+        displayName = parts[parts.length - 1] || name;
+      } else {
+        // For files like "folder/file.txt", extract "file.txt"
+        const parts = name.split("/");
+        displayName = parts[parts.length - 1] || name;
+      }
+
+      return {
+        name: displayName,
+        fullPath: name,
+        type: isDir ? "Folder" : (typeof file.mimeType === "string" ? file.mimeType : "Unknown"),
+        size: file.size ?? 0,
+        date: file.lastModified ?? "",
+        isDirectory: isDir,
+      };
+    });
+  }, [files]);
+
+  const actions: TableActions = useMemo(() => ({
+    onDownload: (fullPath: string) => {
+      downloadMutation.mutate(fullPath);
+    },
+    onRename: (fullPath: string) => {
+      setSelectedContext([fullPath]);
+      setOpenRename(true);
+    },
+    onDelete: (fullPath: string) => {
+      setSelectedContext([fullPath]);
+      setOpenDeleteModal(true);
+    },
+    onNavigate: (fullPath: string) => {
+      const pathParts = fullPath.split("/").filter(Boolean);
+      setCurrentPath(pathParts);
+    },
+    onView: (fullPath: string) => {
+      setCurrFilename(fullPath);
+      setOpenModal(true);
+      getFileMutation.mutate(fullPath, {
+        onSuccess: (data) => {
+          setSelectedDocs([data.blob]);
+        },
+      });
+    },
+  }), [downloadMutation, setSelectedContext, setOpenRename, setOpenDeleteModal, setCurrentPath, getFileMutation, setCurrFilename, setOpenModal, setSelectedDocs]);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center w-full">
+        <div className="flex items-center justify-center h-24">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center w-full">
+        <div className="flex items-center justify-center h-24 text-red-500">
+          Error loading files: {error.message}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="container p-0 lg:mx-auto h-fit w-full max-w-full ">
-      <DataTable columns={columns} data={data} />
+    <div className="flex-1 flex flex-col w-full min-h-0">
+      <DataTable columns={columns} data={tableData} actions={actions} />
     </div>
   );
 }

@@ -1,267 +1,258 @@
-import express, { NextFunction } from "express";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { zValidator } from "@hono/zod-validator";
 import mime from "mime-types";
-import multer from "multer";
 import path from "path";
-import session from "express-session";
-import passport from "passport";
-import cors from "cors";
-import bodyParser from "body-parser";
 import { S3Filesystem } from "./routes/files/Filesystem";
-import dotenv from "dotenv";
-import "./routes/auth/passport";
+import {
+  authMiddleware,
+  generateToken,
+  validateCredentials,
+} from "./routes/auth/auth";
+import {
+  LoginRequestSchema,
+  RenameRequestSchema,
+  DeleteRequestSchema,
+  MkdirRequestSchema,
+  DirectoryRequestSchema,
+  FileRequestSchema,
+  type FileItem,
+} from "./schemas/api";
 
-dotenv.config();
+// Load environment variables (Bun loads .env automatically, but this ensures compatibility)
+if (typeof Bun === "undefined") {
+  await import("dotenv").then((dotenv) => dotenv.config());
+}
 
 const FILESYSTEM = new S3Filesystem();
-(async () => await FILESYSTEM.init())();
-//======================================================= Server Config ==========================================================
-const app = express();
+await FILESYSTEM.init();
+
+const FRONTEND_DOMAIN = process.env.PUBLIC_DOMAIN || "";
 const port = parseInt(process.env.PORT || "8000");
 
-//#TODO: Add validation for env with zod
-const FRONTEND_URL = process.env.PUBLIC_URL || "";
-const FRONTEND_DOMAIN = process.env.PUBLIC_DOMAIN || "";
+// Create base app with CORS
+const app = new Hono()
+  .use(
+    "*",
+    cors({
+      origin: FRONTEND_DOMAIN,
+      credentials: true,
+    })
+  )
 
-app.use(bodyParser.json());
+  // ======================= Auth Routes =======================
 
-app.use(
-  cors({
-    origin: [FRONTEND_DOMAIN],
-    credentials: true,
-  })
-);
-
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "",
-    resave: false,
-    saveUninitialized: false,
-  })
-);
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Use req.body.uploadPath to determine the destination folder
-    const uploadPath = "./Files/";
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    cb(null, file.originalname);
-  },
-});
-
-const upload = multer({ storage });
-
-const isAuthenticated = (
-  req: express.Request,
-  res: express.Response,
-  next: NextFunction
-) => {
-  console.log("checking auth");
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  // res.redirect(FRONTEND_URL); // Redirect to login page if not authenticated
-  res.redirect("http://localhost:93");
-};
-
-app.post("/checkAuth", (req, res) => {
-  if (req.isAuthenticated()) {
-    return res.status(200).send();
-  }
-
-  return res.status(403).send();
-});
-
-app.get("/test", (req, res) => {
-  return res.send("test");
-});
-
-app.post("/logout", (req, res) => {
-  req.logOut((err) => {
-    if (err) console.log(err);
-
-    req.session.cookie.expires = new Date(1);
-
-    return res.status(200).send();
-  });
-});
-
-app.post(
-  "/login",
-  passport.authenticate("local", {
-    successRedirect: "/success",
-    failureRedirect: "/failure",
-  })
-);
-
-app.get("/testAuth", isAuthenticated, (req, res) => {
-  return res.send("Authorized!");
-});
-
-app.get("/success", (req, res) => {
-  return res.status(200).send({ status: "success!" });
-});
-
-app.get("/failure", (req, res) => {
-  return res.status(403).send({ status: "failure!" });
-});
-
-app.get("/logout", (req, res) => {
-  req.logout(() => {
-    console.log("Logged out!");
-  });
-
-  return res.redirect(FRONTEND_URL);
-});
-
-// ============================================================================================
-
-app.post("/rename", isAuthenticated, async (req, res) => {
-  try {
-    const source: string = req.body.source;
-    const dest: string = req.body.dest;
-    if (req.body.type === "dir") {
-      console.log(`Dir Renaming ${source} => ${dest}`);
-      const files = FILESYSTEM.fileList;
-
-      await FILESYSTEM.renameObject(source, dest + "/");
-
-      files.forEach(async (currFile) => {
-        if (currFile.Key?.includes(source)) {
-          console.log("currKey", currFile);
-          let tempDest = currFile.Key.replace(source, dest + "/");
-          console.log("tempDest", tempDest);
-          await FILESYSTEM.renameObject(currFile.Key, tempDest);
-        }
-      });
-
-      return res.status(200).send();
-    } else {
-      console.log(`File Renaming ${source} => ${dest}`);
-      const status = await FILESYSTEM.renameObject(source, dest);
-
-      if (status) {
-        return res.status(200).send();
-      }
-    }
-    res.status(400).send();
-  } catch (err) {
-    console.log("error renaming:", err);
-  }
-});
-
-app.post("/delete", isAuthenticated, async (req, res) => {
-  try {
-    const names = req.body.names;
-
-    const status = await FILESYSTEM.deleteObjects(names);
-
-    if (status) {
-      return res.status(200).send();
-    }
-    return res.status(400).send();
-  } catch (err) {
-    console.log("error renaming:", err);
-  }
-});
-
-app.post("/mkdir", isAuthenticated, async (req, res) => {
-  try {
-    const name = req.body.name;
-
-    const status = await FILESYSTEM.putObject(name, "dir");
-
-    if (status) {
-      return res.status(200).send();
-    }
-    return res.status(400).send();
-  } catch (err) {
-    console.log("error renaming:", err);
-  }
-});
-
-app.post(
-  "/upload",
-  isAuthenticated,
-  upload.array("files", 25),
-  async (req, res) => {
+  .post("/login", zValidator("json", LoginRequestSchema), async (c) => {
     try {
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).send("No files uploaded.");
+      const { username, password } = c.req.valid("json");
+      const user = await validateCredentials(username, password);
+
+      if (!user) {
+        return c.json({ status: "failure" as const }, 403);
       }
 
-      console.log("req.files:", req.files);
-      console.log("uploadPath", req.body.uploadPath);
+      const token = await generateToken(user);
+      return c.json({ status: "success" as const, token });
+    } catch (error) {
+      console.error("Login error:", error);
+      return c.json({ status: "failure" as const }, 403);
+    }
+  })
 
-      const fileRes = await FILESYSTEM.putObjects(
-        req.files as Express.Multer.File[],
-        req.body.uploadPath
-      );
+  .post("/logout", (c) => {
+    return c.json({ status: "logged out" as const }, 200);
+  })
 
-      console.log("putObjects res:", fileRes);
+  .post("/checkAuth", authMiddleware, (c) => {
+    return c.json({ authenticated: true as const }, 200);
+  })
 
-      // const fileDetails = req.files.map((file) => ({
-      //   filePath: file.path,
-      //   fileName: file.filename,
-      // }));
+  .get("/test", (c) => {
+    return c.text("test");
+  })
 
-      // You can now save 'fileDetails' to a database or perform other actions
-      // ...
+  .get("/testAuth", authMiddleware, (c) => {
+    return c.text("Authorized!");
+  })
 
-      return res.status(200).json({});
+  // ======================= File Operations =======================
+
+  .post(
+    "/rename",
+    authMiddleware,
+    zValidator("json", RenameRequestSchema),
+    async (c) => {
+      try {
+        const { source, dest, type } = c.req.valid("json");
+
+        if (type === "dir") {
+          console.log(`Dir Renaming ${source} => ${dest}`);
+          const files = FILESYSTEM.fileList;
+
+          await FILESYSTEM.renameObject(source, dest + "/");
+
+          for (const currFile of files) {
+            if (currFile.Key?.includes(source)) {
+              console.log("currKey", currFile);
+              const tempDest = currFile.Key.replace(source, dest + "/");
+              console.log("tempDest", tempDest);
+              await FILESYSTEM.renameObject(currFile.Key, tempDest);
+            }
+          }
+
+          return c.json({ success: true as const }, 200);
+        } else {
+          console.log(`File Renaming ${source} => ${dest}`);
+          const status = await FILESYSTEM.renameObject(source, dest);
+
+          if (status) {
+            return c.json({ success: true as const }, 200);
+          }
+        }
+
+        return c.json({ success: false as const, error: "Rename failed" }, 400);
+      } catch (err) {
+        console.log("error renaming:", err);
+        return c.json({ success: false as const, error: "Internal error" }, 500);
+      }
+    }
+  )
+
+  .post(
+    "/delete",
+    authMiddleware,
+    zValidator("json", DeleteRequestSchema),
+    async (c) => {
+      try {
+        const { names } = c.req.valid("json");
+        const status = await FILESYSTEM.deleteObjects(names);
+
+        if (status) {
+          return c.json({ success: true as const }, 200);
+        }
+        return c.json({ success: false as const, error: "Delete failed" }, 400);
+      } catch (err) {
+        console.log("error deleting:", err);
+        return c.json({ success: false as const, error: "Internal error" }, 500);
+      }
+    }
+  )
+
+  .post(
+    "/mkdir",
+    authMiddleware,
+    zValidator("json", MkdirRequestSchema),
+    async (c) => {
+      try {
+        const { name } = c.req.valid("json");
+        const status = await FILESYSTEM.putObject(name, "dir");
+
+        if (status) {
+          return c.json({ success: true as const }, 200);
+        }
+        return c.json({ success: false as const, error: "Create directory failed" }, 400);
+      } catch (err) {
+        console.log("error creating directory:", err);
+        return c.json({ success: false as const, error: "Internal error" }, 500);
+      }
+    }
+  )
+
+  .post("/upload", authMiddleware, async (c) => {
+    try {
+      const formData = await c.req.formData();
+      const uploadPath = (formData.get("uploadPath") as string) || "";
+      const files = formData.getAll("files") as File[];
+
+      if (!files || files.length === 0) {
+        return c.json({ success: false as const, error: "No files uploaded" }, 400);
+      }
+
+      console.log("files:", files);
+      console.log("uploadPath", uploadPath);
+
+      for (const file of files) {
+        const key = uploadPath ? `${uploadPath}${file.name}` : file.name;
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        await FILESYSTEM.putObject(key, file.type, buffer);
+      }
+
+      return c.json({ success: true as const }, 200);
     } catch (error) {
       console.error("Error uploading files:", error);
-      return res.status(500).send("Internal Server Error");
+      return c.json({ success: false as const, error: "Internal error" }, 500);
     }
-  }
-);
+  })
 
-app.post("/:resource(*)", isAuthenticated, async (req, res) => {
-  const resource = req.body.path || "";
-  const isDir = (path: string) => path[path.length - 1] === "/" || path === "";
+  .post(
+    "/directory",
+    authMiddleware,
+    zValidator("json", DirectoryRequestSchema),
+    async (c) => {
+      try {
+        const { path: dirPath } = c.req.valid("json");
+        const isDir = (p: string) => p[p.length - 1] === "/" || p === "";
 
-  console.log(`Resource: ${resource} isDir: ${isDir(resource)}`);
+        console.log(`Listing directory: ${dirPath}`);
 
-  try {
-    if (isDir(resource)) {
-      const items = await FILESYSTEM.listObjects(resource);
+        const items = await FILESYSTEM.listObjects(dirPath);
 
-      const contentList = items.map((item) => {
-        console.log(item);
-        return {
+        // Filter out the current directory itself from results
+        const filteredItems = items.filter((item) => item.Key !== dirPath);
+
+        const contentList: FileItem[] = filteredItems.map((item) => ({
           name: item.Key,
-          mimeType: isDir(item.Key || "") ? "dir" : mime.lookup(item.Key || ""),
+          mimeType: isDir(item.Key || "")
+            ? "dir"
+            : (mime.lookup(item.Key || "") || false),
           size: item.Size,
           lastModified: item.LastModified,
-        };
-      });
+        }));
 
-      return res.send(JSON.stringify(contentList));
-    } else {
-      const fileContent = await FILESYSTEM.getObject(resource);
-
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=${path.basename(resource)}`
-      );
-
-      console.log("fileContent:", fileContent);
-
-      res.setHeader("Content-Type", mime.lookup(resource) || "");
-      return res.send(fileContent.data);
+        return c.json(contentList);
+      } catch (error) {
+        console.error(error);
+        return c.json({ error: "Directory not found" }, 404);
+      }
     }
-  } catch (error) {
-    console.error(error);
-    return res.status(404).send("Resource not found");
-  }
-});
+  )
 
-// =========================================================================================
-app.listen(port, "0.0.0.0", function () {
-  console.log(`Server is running at http://localhost:${port}`);
-});
+  .post(
+    "/file",
+    authMiddleware,
+    zValidator("json", FileRequestSchema),
+    async (c) => {
+      try {
+        const { path: filePath } = c.req.valid("json");
+
+        console.log(`Downloading file: ${filePath}`);
+
+        const fileContent = await FILESYSTEM.getObject(filePath);
+
+        return new Response(fileContent.data, {
+          status: 200,
+          headers: {
+            "Content-Disposition": `attachment; filename=${path.basename(filePath)}`,
+            "Content-Type": mime.lookup(filePath) || "application/octet-stream",
+          },
+        });
+      } catch (error) {
+        console.error(error);
+        return c.json({ error: "File not found" }, 404);
+      }
+    }
+  );
+
+// Export the app type for hono/client RPC
+export type AppType = typeof app;
+
+// ======================= Start Server =======================
+
+console.log(`Server is running at http://localhost:${port}`);
+
+export default {
+  port,
+  fetch: app.fetch,
+};

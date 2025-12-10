@@ -1,9 +1,9 @@
-
 FROM node:18-alpine AS deps
 
 WORKDIR /app
 
-COPY ./client/package.json ./client/package-lock.json ./
+# Copy frontend package files
+COPY ./frontend/client/package.json ./frontend/client/package-lock.json ./
 
 RUN npm ci
 
@@ -14,4 +14,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package-lock.json ./package-lock.json
 
-COPY ./client/ .
+COPY ./frontend/client/ .
+
+# Backend is mounted as volume at runtime for TypeScript project references

@@ -26,14 +26,24 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
+export interface TableActions {
+  onDownload?: (fullPath: string) => void;
+  onRename?: (fullPath: string) => void;
+  onDelete?: (fullPath: string) => void;
+  onNavigate?: (fullPath: string) => void;
+  onView?: (fullPath: string) => void;
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  actions?: TableActions;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
+  actions,
 }: DataTableProps<TData, TValue>) {
   const tableRef = useRef<HTMLTableSectionElement>(null!);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -52,6 +62,9 @@ export function DataTable<TData, TValue>({
     state: {
       sorting,
       columnVisibility,
+    },
+    meta: {
+      actions,
     },
   });
 
@@ -86,10 +99,9 @@ export function DataTable<TData, TValue>({
   }, []);
 
   return (
-    <div className="w-full overflow-hidden">
-      <div className="items-center py-2 hidden lg:flex"></div>
-      <div className="rounded-md border-2 border-primary overflow-x-hidden overflow-y-scroll w-full max-h-[65dvh] ">
-        <Table className="flex flex-col w-full text-ellipsis ">
+    <div className="flex-1 flex flex-col w-full overflow-hidden min-h-0">
+      <div className="flex-1 rounded-md border-2 border-primary overflow-x-hidden overflow-y-auto w-full min-h-0">
+        <Table className="flex flex-col w-full text-ellipsis">
           <TableHeader className="border-b-2 border-primary sticky top-0 bg-background z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>

@@ -1,17 +1,21 @@
-import useFileSystem from "@/store/fileStore";
+import useFileStore from "@/store/fileStore";
+import { useRenameFile } from "@/app/FileBrowser/_lib/filesystem/useRenameFile";
+import { useCreateDirectory } from "@/app/FileBrowser/_lib/filesystem/useCreateDirectory";
+import { useDeleteFiles } from "@/app/FileBrowser/_lib/filesystem/useDeleteFile";
+import { useDownloadFile } from "@/app/FileBrowser/_lib/filesystem/useDownloadFiles";
+import { useGetDirectory, type FileItem } from "@/app/FileBrowser/_lib/filesystem/useGetDirectory";
 
-const ContextMenuHelpers = () => {
-  const {
-    selectedContext,
-    selected,
-    rawFiles,
-    handleFileClick,
-    handleRename,
-    handleCreateDir,
-    handleDeleteObjects,
-    handleDirClick,
-    currentPath,
-  } = useFileSystem();
+const useContextMenuHelpers = () => {
+  const { selectedContext, currentPath } = useFileStore();
+
+  const currentPathString =
+    currentPath.length > 0 ? currentPath.join("/") + "/" : "";
+
+  const { data: files = [] } = useGetDirectory(currentPathString);
+  const renameMutation = useRenameFile();
+  const createDirMutation = useCreateDirectory();
+  const deleteMutation = useDeleteFiles();
+  const downloadMutation = useDownloadFile();
 
   const getExt = (name: string) => {
     const tempName = name.split(".");
@@ -19,7 +23,7 @@ const ContextMenuHelpers = () => {
   };
 
   const handleContextRename = async (action: string, dest: string) => {
-    const filenames = rawFiles.map((curr) => curr.name);
+    const filenames = files.map((curr: FileItem) => curr.name);
     console.log("filenames", filenames);
 
     if (action === "rename") {
@@ -44,7 +48,7 @@ const ContextMenuHelpers = () => {
         console.log("currDest:", filename);
 
         if (filenames.includes(filename)) alert("File already Exists!");
-        else handleRename(selectedContext[0], filename, "file");
+        else renameMutation.mutate({ source: selectedContext[0], dest: filename, type: "file" });
       }
 
       //If currently selected object is a dir, and action is rename
@@ -58,7 +62,7 @@ const ContextMenuHelpers = () => {
         if (filenames.includes(dest)) {
           alert("Folder already Exists!");
         } else {
-          await handleRename(selectedContext[0], currDir + dest, "dir");
+          renameMutation.mutate({ source: selectedContext[0], dest: currDir + dest, type: "dir" });
         }
       }
     }
@@ -73,7 +77,7 @@ const ContextMenuHelpers = () => {
       }
       //If dir doesnt exists, create it
       else {
-        await handleCreateDir(
+        createDirMutation.mutate(
           currentPath.length > 0
             ? currentPath.join("/") + "/" + dirname
             : dirname
@@ -83,29 +87,20 @@ const ContextMenuHelpers = () => {
   };
 
   const handleContextDelete = async () => {
-    handleDeleteObjects(selectedContext);
+    deleteMutation.mutate(selectedContext);
   };
 
   const handleContextSave = () => {
     selectedContext.forEach((context) => {
-      if (context.includes(".")) handleFileClick(context);
+      if (context.includes(".")) downloadMutation.mutate(context);
     });
   };
 
-  //   const handleContextCopy = () => {
-  //     // if top menu => override with all rows
-  //     // if context menu => override with single row
-  //   };
-  //   const handleContextPaste = () => {
-  //     //if copy => paste into current dir, if currDir is same as Copy dir, rename with (Copy, ...etc)
-  //   };
-
   return {
-    // handleContextCopy: handleContextCopy,
-    handleContextDelete: handleContextDelete,
-    handleContextRename: handleContextRename,
-    handleContextSave: handleContextSave,
+    handleContextDelete,
+    handleContextRename,
+    handleContextSave,
   };
 };
 
-export default ContextMenuHelpers;
+export default useContextMenuHelpers;

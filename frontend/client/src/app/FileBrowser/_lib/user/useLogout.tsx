@@ -1,23 +1,17 @@
 import { useMutation } from "@tanstack/react-query";
-import { URLs } from "@/config/urls";
 import { queryClient } from "../../../../lib/queryClient";
+import { api, clearAuthToken } from "@/lib/api";
 
-async function mutationFunction(): Promise<void> {
-  const response = await fetch(URLs.baseURL + URLs.logOut, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    mode: "cors",
-    credentials: "include",
-  });
+async function mutationFunction() {
+  const response = await api.logout.$post();
 
   if (!response.ok) {
-    const errorMessage = await response.text();
-    throw new Error("Failed to logout!\n" + errorMessage);
+    throw new Error("Failed to logout!");
   }
 
-  return;
+  clearAuthToken();
+
+  return response.json();
 }
 
 export function useLogout() {

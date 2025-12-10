@@ -1,5 +1,11 @@
 import { _Object } from "@aws-sdk/client-s3";
 
+export interface UploadFile {
+  name: string;
+  type: string;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+}
+
 export abstract class Filesystem {
   rootDir: string;
 
@@ -16,10 +22,10 @@ export abstract class Filesystem {
   abstract putObject: (
     objectName: string,
     contentType: string,
-    currObject: Buffer
+    currObject?: Buffer
   ) => Promise<boolean>;
   abstract putObjects: (
-    files: Express.Multer.File[],
+    files: UploadFile[],
     dir: string
   ) => Promise<{
     [k: string]: Promise<boolean>;

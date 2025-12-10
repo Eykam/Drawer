@@ -1,9 +1,12 @@
+import { HTMLAttributes } from "react";
+
 export type FileInfo = {
   name: string;
-  size: number;
+  fullPath: string;
   type: string;
+  size: number;
   date: string;
-  imgSrc?: string;
+  isDirectory: boolean;
 };
 
 export type NavItemProps = HTMLAttributes<HTMLAnchorElement> & {

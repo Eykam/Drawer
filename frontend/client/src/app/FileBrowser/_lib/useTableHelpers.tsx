@@ -1,202 +1,119 @@
-import useFileSystem from "@/store/fileStore";
-import { useState } from "react";
-import InfiniteList from "@/components/infinite-list";
+import useFileStore from "@/store/fileStore";
+import { useState, useMemo } from "react";
+import { useDownloadFile } from "@/app/FileBrowser/_lib/filesystem/useDownloadFiles";
+import { useGetDirectory, type FileItem } from "@/app/FileBrowser/_lib/filesystem/useGetDirectory";
+
+type SortField = "name" | "date" | "type" | "size";
+type SortDirection = "asc" | "desc";
 
 const useTableHelpers = () => {
-  const [nameAscending, setNameAscending] = useState(true);
-  const [typeAscending, setTypeAscending] = useState(true);
-  const [dateAscending, setDateAscending] = useState(true);
-  const [sizeAscending, setSizeAscending] = useState(true);
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
-  const {
-    selected,
-    rawFiles,
-    handleCloseDeleteModal,
-    setFiles,
-    selectAll,
-    handleFileClick,
-    setSelectedContext,
-  } = useFileSystem((state) => ({
-    selected: state.selected,
-    rawFiles: state.rawFiles,
-    handleCloseDeleteModal: state.handleCloseDeleteModal,
-    setFiles: state.setFiles,
-    selectAll: state.selectAll,
-    setSelectedContext: state.setSelectedContext,
-    handleFileClick: state.handleFileClick,
-  }));
+  const { selected, currentPath, setOpenDeleteModal, setSelectedContext, clearSelected } =
+    useFileStore();
 
-  const sortByName = async () => {
-    const rawTemp = rawFiles;
+  const currentPathString =
+    currentPath.length > 0 ? currentPath.join("/") + "/" : "";
 
-    nameAscending
-      ? rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else {
-            return b.name.localeCompare(a.name);
-          }
-        })
-      : rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else {
-            return a.name.localeCompare(b.name);
-          }
-        });
+  const { data: files = [] } = useGetDirectory(currentPathString);
+  const downloadMutation = useDownloadFile();
 
-    setFiles(<InfiniteList FileList={rawTemp} selectAll={selectAll} />);
+  const getExt = (name: string) => {
+    const tempName = name.split(".");
+    return tempName[tempName.length - 1];
   };
 
   const formatDate = (date: string) => {
     const tempDate = date.split("T")[0].split("-");
-
     const fileDate = [tempDate[1], tempDate[2], tempDate[0]].join("/");
     const fileTime = date.split("T")[1].split(":").slice(0, 2).join(":");
-
     return fileDate + " " + fileTime;
   };
 
-  const sortByDate = async () => {
-    const rawTemp = rawFiles;
+  // Memoized sorted files
+  const sortedFiles = useMemo(() => {
+    const sorted = [...files];
 
-    dateAscending
-      ? rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return b.name.localeCompare(a.name);
-          } else {
-            const aDate = formatDate(a.lastModified).split(" ");
-            const bDate = formatDate(b.lastModified).split(" ");
+    sorted.sort((a: FileItem, b: FileItem) => {
+      // Directories always first
+      if (a.mimeType === "dir" && b.mimeType !== "dir") return -1;
+      if (a.mimeType !== "dir" && b.mimeType === "dir") return 1;
 
-            if (aDate[0].localeCompare(bDate[0]) === 0) {
-              return aDate[1].localeCompare(bDate[1]);
-            }
+      // Both are directories - sort by name
+      if (a.mimeType === "dir" && b.mimeType === "dir") {
+        return (a.name ?? "").localeCompare(b.name ?? "");
+      }
 
-            return aDate[0].localeCompare(bDate[0]);
+      // Both are files - sort by selected field
+      let comparison = 0;
+
+      switch (sortField) {
+        case "name":
+          comparison = (a.name ?? "").localeCompare(b.name ?? "");
+          break;
+        case "date":
+          if (a.lastModified && b.lastModified) {
+            const aDate = formatDate(a.lastModified);
+            const bDate = formatDate(b.lastModified);
+            comparison = aDate.localeCompare(bDate);
           }
-        })
-      : rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return a.name.localeCompare(b.name);
-          } else {
-            const aDate = formatDate(a.lastModified).split(" ");
-            const bDate = formatDate(b.lastModified).split(" ");
+          break;
+        case "type":
+          const aExt = getExt(a.name ?? "");
+          const bExt = getExt(b.name ?? "");
+          comparison = aExt.localeCompare(bExt);
+          break;
+        case "size":
+          comparison = (a.size ?? 0) - (b.size ?? 0);
+          break;
+      }
 
-            if (bDate[0].localeCompare(aDate[0]) === 0) {
-              return bDate[1].localeCompare(aDate[1]);
-            }
-
-            return bDate[0].localeCompare(aDate[0]);
-          }
-        });
-
-    setFiles(<InfiniteList FileList={rawTemp} selectAll={selectAll} />);
-  };
-
-  const getExt = (name: string) => {
-    const tempName = name.split(".");
-    return name.split(".")[tempName.length - 1];
-  };
-
-  const sortByType = async () => {
-    const rawTemp = rawFiles;
-
-    typeAscending
-      ? rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return b.name.localeCompare(a.name);
-          } else {
-            const aExt = getExt(a.name);
-            const bExt = getExt(b.name);
-            return bExt.localeCompare(aExt);
-          }
-        })
-      : rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return a.name.localeCompare(b.name);
-          } else {
-            const aExt = getExt(a.name);
-            const bExt = getExt(b.name);
-            return aExt.localeCompare(bExt);
-          }
-        });
-
-    setFiles(<InfiniteList FileList={rawTemp} selectAll={selectAll} />);
-  };
-
-  const sortBySize = async () => {
-    const rawTemp = rawFiles;
-
-    sizeAscending
-      ? rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return b.name.localeCompare(a.name);
-          } else {
-            return b.size - a.size;
-          }
-        })
-      : rawTemp.sort((a, b) => {
-          if (a.mimeType === "dir" && b.mimeType !== "dir") {
-            return -1;
-          } else if (a.mimeType !== "dir" && b.mimeType === "dir") {
-            return 1;
-          } else if (a.mimeType === "dir" && b.mimeType === "dir") {
-            return a.name.localeCompare(b.name);
-          } else {
-            return a.size - b.size;
-          }
-        });
-
-    setFiles(<InfiniteList FileList={rawTemp} selectAll={selectAll} />);
-  };
-
-  const saveSelected = async () => {
-    Array.from(selected).forEach((curr) => {
-      if (curr.includes(".")) handleFileClick(curr);
+      return sortDirection === "asc" ? comparison : -comparison;
     });
 
-    selectAll(false);
+    return sorted;
+  }, [files, sortField, sortDirection]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
   };
 
-  const deleteSelected = async () => {
-    handleCloseDeleteModal(true);
+  const sortByName = () => toggleSort("name");
+  const sortByDate = () => toggleSort("date");
+  const sortByType = () => toggleSort("type");
+  const sortBySize = () => toggleSort("size");
+
+  const saveSelected = () => {
+    Array.from(selected).forEach((curr) => {
+      if (curr.includes(".")) downloadMutation.mutate(curr);
+    });
+    clearSelected();
+  };
+
+  const deleteSelected = () => {
+    setOpenDeleteModal(true);
     setSelectedContext(Array.from(selected));
-    selectAll(false);
+    clearSelected();
   };
 
   return {
-    nameAscending,
-    typeAscending,
-    dateAscending,
-    sizeAscending,
-    setNameAscending,
-    setTypeAscending,
-    setDateAscending,
-    setSizeAscending,
+    sortedFiles,
+    sortField,
+    sortDirection,
+    nameAscending: sortField === "name" && sortDirection === "asc",
+    typeAscending: sortField === "type" && sortDirection === "asc",
+    dateAscending: sortField === "date" && sortDirection === "asc",
+    sizeAscending: sortField === "size" && sortDirection === "asc",
+    setNameAscending: () => {},
+    setTypeAscending: () => {},
+    setDateAscending: () => {},
+    setSizeAscending: () => {},
     sortByName,
     sortByDate,
     sortByType,
