@@ -7,17 +7,56 @@ import { useGetFile } from "@/app/FileBrowser/_lib/filesystem/useGetFile";
 import useFileStore from "@/store/fileStore";
 
 export default function ListView() {
-  const { currentPath, setCurrentPath, setSelectedContext, setOpenRename, setOpenDeleteModal, setOpenModal, setCurrFilename, setSelectedDocs } = useFileStore();
+  const {
+    currentPath,
+    setCurrentPath,
+    setSelectedContext,
+    setOpenRename,
+    setOpenDeleteModal,
+    setOpenModal,
+    setCurrFilename,
+    setSelectedDocs,
+    favorites,
+    addToFavorites,
+    removeFromFavorites,
+    addToRecents,
+    sidebarFilter,
+    setSidebarFilter,
+    recents,
+  } = useFileStore();
   const downloadMutation = useDownloadFile();
   const getFileMutation = useGetFile();
 
   const currentPathString =
     currentPath.length > 0 ? currentPath.join("/") + "/" : "";
 
-  const { data: files = [], isLoading, error } = useGetDirectory(currentPathString);
+  // Only fetch directory when in "all" mode
+  const { data: files = [], isLoading, error } = useGetDirectory(
+    sidebarFilter === "all" ? currentPathString : ""
+  );
 
   // Transform FileItem to match DataTable column accessors
   const tableData = useMemo(() => {
+    // For favorites/recents, convert paths to FileInfo
+    if (sidebarFilter === "favorites" || sidebarFilter === "recents") {
+      const paths = sidebarFilter === "favorites" ? favorites : recents;
+      return paths.map((path) => {
+        const isDir = path.endsWith("/");
+        const parts = path.replace(/\/$/, "").split("/");
+        const displayName = parts[parts.length - 1] || path;
+
+        return {
+          name: displayName,
+          fullPath: path,
+          type: isDir ? "Folder" : "File",
+          size: 0,
+          date: "",
+          isDirectory: isDir,
+        };
+      });
+    }
+
+    // Normal directory view
     return files.map((file) => {
       const name = file.name ?? "";
       const isDir = file.mimeType === "dir";
@@ -43,7 +82,7 @@ export default function ListView() {
         isDirectory: isDir,
       };
     });
-  }, [files]);
+  }, [files, sidebarFilter, favorites, recents]);
 
   const actions: TableActions = useMemo(() => ({
     onDownload: (fullPath: string) => {
@@ -58,10 +97,16 @@ export default function ListView() {
       setOpenDeleteModal(true);
     },
     onNavigate: (fullPath: string) => {
+      addToRecents(fullPath);
+      // Switch to All Files view when navigating to a directory
+      if (sidebarFilter !== "all") {
+        setSidebarFilter("all");
+      }
       const pathParts = fullPath.split("/").filter(Boolean);
       setCurrentPath(pathParts);
     },
     onView: (fullPath: string) => {
+      addToRecents(fullPath);
       setCurrFilename(fullPath);
       setOpenModal(true);
       getFileMutation.mutate(fullPath, {
@@ -70,9 +115,17 @@ export default function ListView() {
         },
       });
     },
-  }), [downloadMutation, setSelectedContext, setOpenRename, setOpenDeleteModal, setCurrentPath, getFileMutation, setCurrFilename, setOpenModal, setSelectedDocs]);
+    onToggleFavorite: (fullPath: string) => {
+      if (favorites.includes(fullPath)) {
+        removeFromFavorites(fullPath);
+      } else {
+        addToFavorites(fullPath);
+      }
+    },
+    isFavorite: (fullPath: string) => favorites.includes(fullPath),
+  }), [downloadMutation, setSelectedContext, setOpenRename, setOpenDeleteModal, setCurrentPath, getFileMutation, setCurrFilename, setOpenModal, setSelectedDocs, favorites, addToFavorites, removeFromFavorites, addToRecents, sidebarFilter, setSidebarFilter]);
 
-  if (isLoading) {
+  if (sidebarFilter === "all" && isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center w-full">
         <div className="flex items-center justify-center h-24">Loading...</div>
@@ -80,11 +133,23 @@ export default function ListView() {
     );
   }
 
-  if (error) {
+  if (sidebarFilter === "all" && error) {
     return (
       <div className="flex-1 flex items-center justify-center w-full">
         <div className="flex items-center justify-center h-24 text-red-500">
           Error loading files: {error.message}
+        </div>
+      </div>
+    );
+  }
+
+  if (tableData.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center w-full">
+        <div className="flex items-center justify-center h-24 text-muted-foreground">
+          {sidebarFilter === "favorites" && "No favorites yet. Right-click on a file or folder to add it to favorites."}
+          {sidebarFilter === "recents" && "No recent files yet. Open a file or folder to see it here."}
+          {sidebarFilter === "all" && "This folder is empty."}
         </div>
       </div>
     );

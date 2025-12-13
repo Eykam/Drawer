@@ -16,8 +16,27 @@ import {
   MkdirRequestSchema,
   DirectoryRequestSchema,
   FileRequestSchema,
+  SearchRequestSchema,
   type FileItem,
 } from "./schemas/api";
+import {
+  initSearchService,
+  searchFiles,
+} from "./services/search";
+import {
+  createJob,
+  queueFiles,
+  updateJobTotalFiles,
+  getLatestJobProgress,
+  getRecentJobs,
+  hasActiveJob,
+  cancelActiveJobs,
+  initPersistentJobs,
+  queueFileForIndex,
+  queueFileForDelete,
+  removeFileFromQueue,
+} from "./services/indexDb";
+import { startWorker } from "./services/indexWorker";
 
 // Load environment variables (Bun loads .env automatically, but this ensures compatibility)
 if (typeof Bun === "undefined") {
@@ -26,6 +45,22 @@ if (typeof Bun === "undefined") {
 
 const FILESYSTEM = new S3Filesystem();
 await FILESYSTEM.init();
+
+// Initialize search service (Weaviate + Tika)
+try {
+  await initSearchService();
+} catch (error) {
+  console.warn("Search service initialization failed, search will be unavailable:", error);
+}
+
+// Initialize persistent jobs for upload/delete tracking
+const { uploadJobId, deleteJobId } = initPersistentJobs();
+console.log(`Initialized persistent jobs: upload=${uploadJobId}, delete=${deleteJobId}`);
+
+// Start background index worker
+startWorker().catch((error) => {
+  console.error("Failed to start index worker:", error);
+});
 
 const FRONTEND_DOMAIN = process.env.PUBLIC_DOMAIN || "";
 const port = parseInt(process.env.PORT || "8000");
@@ -97,6 +132,13 @@ const app = new Hono()
               const tempDest = currFile.Key.replace(source, dest + "/");
               console.log("tempDest", tempDest);
               await FILESYSTEM.renameObject(currFile.Key, tempDest);
+
+              // Update index: delete old path, queue new path for indexing
+              if (!currFile.Key.endsWith("/")) {
+                removeFileFromQueue(currFile.Key);
+                queueFileForDelete(currFile.Key);
+                queueFileForIndex(tempDest, currFile.Size || 0, mime.lookup(tempDest) || null);
+              }
             }
           }
 
@@ -106,6 +148,14 @@ const app = new Hono()
           const status = await FILESYSTEM.renameObject(source, dest);
 
           if (status) {
+            // Update index: delete old path, queue new path for indexing
+            removeFileFromQueue(source);
+            queueFileForDelete(source);
+
+            // Get file info for the new path
+            const fileInfo = FILESYSTEM.fileList.find((f) => f.Key === dest);
+            queueFileForIndex(dest, fileInfo?.Size || 0, mime.lookup(dest) || null);
+
             return c.json({ success: true as const }, 200);
           }
         }
@@ -128,6 +178,14 @@ const app = new Hono()
         const status = await FILESYSTEM.deleteObjects(names);
 
         if (status) {
+          // Queue files for deletion from index (processed by background worker)
+          for (const name of names) {
+            if (!name.endsWith("/")) {
+              removeFileFromQueue(name);
+              queueFileForDelete(name);
+              console.log(`Queued file for index deletion: ${name}`);
+            }
+          }
           return c.json({ success: true as const }, 200);
         }
         return c.json({ success: false as const, error: "Delete failed" }, 400);
@@ -177,6 +235,10 @@ const app = new Hono()
         const buffer = Buffer.from(arrayBuffer);
 
         await FILESYSTEM.putObject(key, file.type, buffer);
+
+        // Queue file for indexing (will be processed by background worker)
+        queueFileForIndex(key, file.size, file.type);
+        console.log(`Queued file for indexing: ${key}`);
       }
 
       return c.json({ success: true as const }, 200);
@@ -243,7 +305,84 @@ const app = new Hono()
         return c.json({ error: "File not found" }, 404);
       }
     }
-  );
+  )
+
+  // ======================= Search =======================
+
+  .post(
+    "/search",
+    authMiddleware,
+    zValidator("json", SearchRequestSchema),
+    async (c) => {
+      try {
+        const { query, limit } = c.req.valid("json");
+
+        console.log(`Searching for: ${query}`);
+
+        const results = await searchFiles(query, limit);
+
+        return c.json({ results });
+      } catch (error) {
+        console.error("Search error:", error);
+        return c.json({ error: "Search failed" }, 500);
+      }
+    }
+  )
+
+  // ======================= Reindex =======================
+
+  .get("/reindex/status", authMiddleware, (c) => {
+    const progress = getLatestJobProgress();
+    return c.json(progress);
+  })
+
+  .post("/reindex/start", authMiddleware, async (c) => {
+    // Check if reindex is already running
+    if (hasActiveJob()) {
+      return c.json({ error: "Reindex already in progress" }, 409);
+    }
+
+    // Get all files from S3
+    const allFiles = await FILESYSTEM.listAllObjects();
+
+    // Filter out directories
+    const filesToIndex = allFiles.filter((f) => f.Key && !f.Key.endsWith("/"));
+
+    if (filesToIndex.length === 0) {
+      return c.json({ error: "No files to index" }, 400);
+    }
+
+    // Create job and queue files
+    const jobId = createJob();
+
+    const files = filesToIndex.map((file) => ({
+      path: file.Key || "",
+      size: file.Size || 0,
+      mimeType: (mime.lookup(file.Key || "") || null) as string | null,
+    }));
+
+    queueFiles(jobId, files);
+    updateJobTotalFiles(jobId, files.length);
+
+    console.log(`Created reindex job ${jobId} with ${files.length} files`);
+
+    return c.json({
+      success: true,
+      jobId,
+      totalFiles: files.length,
+    });
+  })
+
+  .post("/reindex/cancel", authMiddleware, (c) => {
+    cancelActiveJobs();
+    return c.json({ success: true });
+  })
+
+  .get("/reindex/jobs", authMiddleware, (c) => {
+    const limit = parseInt(c.req.query("limit") || "10", 10);
+    const jobs = getRecentJobs(limit);
+    return c.json({ jobs });
+  });
 
 // Export the app type for hono/client RPC
 export type AppType = typeof app;
@@ -255,4 +394,5 @@ console.log(`Server is running at http://localhost:${port}`);
 export default {
   port,
   fetch: app.fetch,
+  idleTimeout: 0, // Disable idle timeout - needed for long-running SSE streams (reindex)
 };

@@ -1,6 +1,6 @@
 import { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, MoreVertical, Folder, File } from "lucide-react";
+import { MoreHorizontal, MoreVertical, Folder, File, Star } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -156,6 +156,7 @@ export const columns: ColumnDef<FileInfo>[] = [
     cell: ({ row, table }) => {
       const file = row.original;
       const actions = (table.options.meta as { actions?: TableActions })?.actions;
+      const isFavorite = actions?.isFavorite?.(file.fullPath) ?? false;
 
       return (
         <div className="w-full flex justify-center text-right">
@@ -184,6 +185,10 @@ export const columns: ColumnDef<FileInfo>[] = [
                   </DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuItem onClick={() => actions?.onToggleFavorite?.(file.fullPath)}>
+                <Star className={`h-4 w-4 mr-2 ${isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`} />
+                {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => actions?.onRename?.(file.fullPath)}>
                 Rename
               </DropdownMenuItem>

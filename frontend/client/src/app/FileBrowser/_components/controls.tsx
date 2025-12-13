@@ -20,11 +20,11 @@ export default function Controls() {
         )}
         <span className="sr-only">Toggle view</span>
       </Button>
-      <Button variant="ghost" size="icon">
+      <Button variant="ghost" size="icon" disabled>
         <Icons.ListOrderedIcon className="w-5 h-5" />
         <span className="sr-only">Sort</span>
       </Button>
-      <Button variant="ghost" size="icon">
+      <Button variant="ghost" size="icon" disabled>
         <Icons.FilterIcon className="w-5 h-5" />
         <span className="sr-only">Filter</span>
       </Button>

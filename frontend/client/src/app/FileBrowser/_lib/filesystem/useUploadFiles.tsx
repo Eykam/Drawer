@@ -2,24 +2,25 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 interface UploadParams {
-  files: FileList;
+  files: FileList | File[];
   uploadPath: string;
 }
 
 async function uploadFiles({ files, uploadPath }: UploadParams) {
-  const formData = new FormData();
-  formData.append("uploadPath", uploadPath);
+  const fileArray = Array.from(files);
 
-  for (let i = 0; i < files.length; i++) {
-    formData.append("files", files[i]);
-  }
-
+  // Hono client expects a plain object for form data
+  // For multiple files, we pass them as an array
   const response = await api.upload.$post({
-    form: formData as unknown as Record<string, string | Blob>,
+    form: {
+      uploadPath,
+      files: fileArray,
+    },
   });
 
   if (!response.ok) {
-    throw new Error("Failed to upload files");
+    const data = await response.json().catch(() => ({ error: "Upload failed" }));
+    throw new Error((data as { error?: string }).error || "Failed to upload files");
   }
 
   return response.json();

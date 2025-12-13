@@ -67,6 +67,34 @@ export class S3Filesystem extends Filesystem {
     }
   };
 
+  /**
+   * List all objects in the bucket recursively (no delimiter)
+   * Used for bulk operations like reindexing
+   */
+  listAllObjects = async (): Promise<_Object[]> => {
+    try {
+      const allObjects: _Object[] = [];
+      let continuationToken: string | undefined;
+
+      do {
+        const command = new ListObjectsV2Command({
+          Bucket: this.bucket,
+          ContinuationToken: continuationToken,
+        });
+
+        const response = await this.client.send(command);
+        const files = response.Contents || [];
+        allObjects.push(...files);
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+
+      return allObjects;
+    } catch (error) {
+      console.error("Error listing all objects:", error);
+      return [];
+    }
+  };
+
   getObject = async (objectName: string): Promise<DrawerFile> => {
     try {
       const command = new GetObjectCommand({

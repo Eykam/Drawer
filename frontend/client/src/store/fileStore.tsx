@@ -6,7 +6,10 @@ export enum ViewModes {
   List,
 }
 
-const STORAGE_KEY = "drawer-view-mode";
+export type SidebarFilter = "all" | "favorites" | "recents";
+
+const STORAGE_KEY = "drawer-file-store";
+const MAX_RECENTS = 20;
 
 interface FileUIState {
   // View mode
@@ -70,6 +73,26 @@ interface FileUIState {
   // File uploads
   fileUploads: FileList | null;
   setFileUploads: (files: FileList | null) => void;
+
+  // Sidebar state
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSidebar: () => void;
+
+  // Sidebar filter
+  sidebarFilter: SidebarFilter;
+  setSidebarFilter: (filter: SidebarFilter) => void;
+
+  // Favorites
+  favorites: string[];
+  addToFavorites: (path: string) => void;
+  removeFromFavorites: (path: string) => void;
+  isFavorite: (path: string) => boolean;
+
+  // Recents
+  recents: string[];
+  addToRecents: (path: string) => void;
+  clearRecents: () => void;
 }
 
 const useFileStore = create<FileUIState>()(
@@ -129,10 +152,54 @@ const useFileStore = create<FileUIState>()(
       // File uploads
       fileUploads: null,
       setFileUploads: (files) => set({ fileUploads: files }),
+
+      // Sidebar state
+      sidebarCollapsed: false,
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+      // Sidebar filter
+      sidebarFilter: "all",
+      setSidebarFilter: (filter) => set({ sidebarFilter: filter }),
+
+      // Favorites
+      favorites: [],
+      addToFavorites: (path) =>
+        set((state) => ({
+          favorites: state.favorites.includes(path)
+            ? state.favorites
+            : [...state.favorites, path],
+        })),
+      removeFromFavorites: (path) =>
+        set((state) => ({
+          favorites: state.favorites.filter((f) => f !== path),
+        })),
+      isFavorite: (path) => {
+        // This is a getter, we need to access state differently
+        return false; // Will be handled via selector
+      },
+
+      // Recents
+      recents: [],
+      addToRecents: (path) =>
+        set((state) => {
+          // Remove if already exists, then add to front
+          const filtered = state.recents.filter((r) => r !== path);
+          const updated = [path, ...filtered].slice(0, MAX_RECENTS);
+          return { recents: updated };
+        }),
+      clearRecents: () => set({ recents: [] }),
     }),
     {
       name: STORAGE_KEY,
-      partialize: (state) => ({ viewMode: state.viewMode, currentPath: state.currentPath }),
+      partialize: (state) => ({
+        viewMode: state.viewMode,
+        currentPath: state.currentPath,
+        sidebarCollapsed: state.sidebarCollapsed,
+        sidebarFilter: state.sidebarFilter,
+        favorites: state.favorites,
+        recents: state.recents,
+      }),
     }
   )
 );

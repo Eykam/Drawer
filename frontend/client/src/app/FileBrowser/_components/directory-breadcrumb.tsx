@@ -7,10 +7,10 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
 import useFileStore from "@/store/fileStore";
-import { Home } from "lucide-react";
+import { Home, Star, Clock } from "lucide-react";
 
 export default function DirectoryBreadcrumb() {
-  const { currentPath, setCurrentPath } = useFileStore();
+  const { currentPath, setCurrentPath, sidebarFilter, setSidebarFilter } = useFileStore();
 
   const handleNavigate = (index: number) => {
     // index -1 means go to root
@@ -21,6 +21,41 @@ export default function DirectoryBreadcrumb() {
       setCurrentPath(currentPath.slice(0, index + 1));
     }
   };
+
+  // Show special breadcrumb for favorites/recents
+  if (sidebarFilter === "favorites") {
+    return (
+      <div className="py-4">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage className="flex items-center gap-1">
+                <Star className="h-4 w-4" />
+                Favorites
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
+    );
+  }
+
+  if (sidebarFilter === "recents") {
+    return (
+      <div className="py-4">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage className="flex items-center gap-1">
+                <Clock className="h-4 w-4" />
+                Recents
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
+    );
+  }
 
   return (
     <div className="py-4">

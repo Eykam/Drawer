@@ -40,6 +40,11 @@ export const FileRequestSchema = z.object({
   path: z.string().min(1),
 });
 
+export const SearchRequestSchema = z.object({
+  query: z.string().min(1),
+  limit: z.number().min(1).max(100).default(20),
+});
+
 // ======================= Response Schemas =======================
 
 export const FileItemSchema = z.object({
@@ -62,6 +67,7 @@ export type DeleteRequest = z.infer<typeof DeleteRequestSchema>;
 export type MkdirRequest = z.infer<typeof MkdirRequestSchema>;
 export type DirectoryRequest = z.infer<typeof DirectoryRequestSchema>;
 export type FileRequest = z.infer<typeof FileRequestSchema>;
+export type SearchRequest = z.infer<typeof SearchRequestSchema>;
 
 export type FileItem = z.infer<typeof FileItemSchema>;
 export type DirectoryListingResponse = z.infer<typeof DirectoryListingResponseSchema>;

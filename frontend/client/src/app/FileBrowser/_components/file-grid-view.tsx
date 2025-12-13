@@ -5,15 +5,38 @@ import { useGetDirectory } from "@/app/FileBrowser/_lib/filesystem/useGetDirecto
 import useFileStore from "@/store/fileStore";
 
 export default function GridView() {
-  const { currentPath, setCurrentPath } = useFileStore();
+  const { currentPath, setCurrentPath, sidebarFilter, setSidebarFilter, favorites, recents } = useFileStore();
 
   const currentPathString =
     currentPath.length > 0 ? currentPath.join("/") + "/" : "";
 
-  const { data: files = [], isLoading, error } = useGetDirectory(currentPathString);
+  // Only fetch directory when in "all" mode
+  const { data: files = [], isLoading, error } = useGetDirectory(
+    sidebarFilter === "all" ? currentPathString : ""
+  );
 
   // Transform FileItem to FileInfo
   const gridData = useMemo(() => {
+    // For favorites/recents, convert paths to FileInfo
+    if (sidebarFilter === "favorites" || sidebarFilter === "recents") {
+      const paths = sidebarFilter === "favorites" ? favorites : recents;
+      return paths.map((path): FileInfo => {
+        const isDir = path.endsWith("/");
+        const parts = path.replace(/\/$/, "").split("/");
+        const displayName = parts[parts.length - 1] || path;
+
+        return {
+          name: displayName,
+          fullPath: path,
+          type: isDir ? "Folder" : "File",
+          size: 0,
+          date: "",
+          isDirectory: isDir,
+        };
+      });
+    }
+
+    // Normal directory view
     return files.map((file): FileInfo => {
       const name = file.name ?? "";
       const isDir = file.mimeType === "dir";
@@ -37,15 +60,19 @@ export default function GridView() {
         isDirectory: isDir,
       };
     });
-  }, [files]);
+  }, [files, sidebarFilter, favorites, recents]);
 
   const handleNavigate = useCallback((fullPath: string) => {
+    // Switch to All Files view when navigating to a directory
+    if (sidebarFilter !== "all") {
+      setSidebarFilter("all");
+    }
     // fullPath is like "folder/" - convert to path array
     const pathParts = fullPath.split("/").filter(Boolean);
     setCurrentPath(pathParts);
-  }, [setCurrentPath]);
+  }, [setCurrentPath, sidebarFilter, setSidebarFilter]);
 
-  if (isLoading) {
+  if (sidebarFilter === "all" && isLoading) {
     return (
       <div className="relative max-h-[85%] overflow-y-scroll">
         <div className="flex items-center justify-center h-24">Loading...</div>
@@ -53,11 +80,23 @@ export default function GridView() {
     );
   }
 
-  if (error) {
+  if (sidebarFilter === "all" && error) {
     return (
       <div className="relative max-h-[85%] overflow-y-scroll">
         <div className="flex items-center justify-center h-24 text-red-500">
           Error loading files: {error.message}
+        </div>
+      </div>
+    );
+  }
+
+  if (gridData.length === 0) {
+    return (
+      <div className="relative max-h-[85%] overflow-y-scroll">
+        <div className="flex items-center justify-center h-24 text-muted-foreground">
+          {sidebarFilter === "favorites" && "No favorites yet. Right-click on a file or folder to add it to favorites."}
+          {sidebarFilter === "recents" && "No recent files yet. Open a file or folder to see it here."}
+          {sidebarFilter === "all" && "This folder is empty."}
         </div>
       </div>
     );
@@ -69,7 +108,7 @@ export default function GridView() {
         {gridData.map((file, index) => (
           <FileCard
             {...file}
-            key={index + file.name}
+            key={index + file.fullPath}
             className="z-10"
             onNavigate={handleNavigate}
           />

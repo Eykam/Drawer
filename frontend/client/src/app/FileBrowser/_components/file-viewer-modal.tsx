@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,15 +14,6 @@ export default function FileViewerModal() {
   const { openModal, setOpenModal, currFilename, setCurrFilename, selectedDocs, setSelectedDocs } = useFileStore();
   const getFileMutation = useGetFile();
   const downloadMutation = useDownloadFile();
-
-  // Clean up blob URLs when modal closes
-  useEffect(() => {
-    if (!openModal) {
-      selectedDocs.forEach((blob) => {
-        URL.revokeObjectURL(URL.createObjectURL(blob));
-      });
-    }
-  }, [openModal]);
 
   const handleClose = () => {
     setOpenModal(false);

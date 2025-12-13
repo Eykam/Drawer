@@ -32,6 +32,8 @@ export interface TableActions {
   onDelete?: (fullPath: string) => void;
   onNavigate?: (fullPath: string) => void;
   onView?: (fullPath: string) => void;
+  onToggleFavorite?: (fullPath: string) => void;
+  isFavorite?: (fullPath: string) => boolean;
 }
 
 interface DataTableProps<TData, TValue> {

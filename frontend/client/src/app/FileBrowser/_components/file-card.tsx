@@ -7,8 +7,15 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FileInfo } from "@/types";
-import { Folder, File } from "lucide-react";
+import { Folder, File, MoreVertical, Star } from "lucide-react";
 import useFileStore from "@/store/fileStore";
 import { useDownloadFile } from "@/app/FileBrowser/_lib/filesystem/useDownloadFiles";
 import { useGetFile } from "@/app/FileBrowser/_lib/filesystem/useGetFile";
@@ -42,18 +49,42 @@ export default function FileCard({
   isDirectory,
   onNavigate,
 }: FileCardProps) {
-  const { setSelectedContext, setOpenRename, setOpenDeleteModal, setOpenModal, setCurrFilename, setSelectedDocs } = useFileStore();
+  const {
+    setSelectedContext,
+    setOpenRename,
+    setOpenDeleteModal,
+    setOpenModal,
+    setCurrFilename,
+    setSelectedDocs,
+    favorites,
+    addToFavorites,
+    removeFromFavorites,
+    addToRecents,
+  } = useFileStore();
   const downloadMutation = useDownloadFile();
   const getFileMutation = useGetFile();
 
+  const isFavorite = favorites.includes(fullPath);
+
+  const handleToggleFavorite = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (isFavorite) {
+      removeFromFavorites(fullPath);
+    } else {
+      addToFavorites(fullPath);
+    }
+  };
+
   const handleOpen = () => {
     if (isDirectory && onNavigate) {
+      addToRecents(fullPath);
       onNavigate(fullPath);
     }
   };
 
   const handleViewFile = () => {
     if (!isDirectory) {
+      addToRecents(fullPath);
       setCurrFilename(fullPath);
       setOpenModal(true);
       getFileMutation.mutate(fullPath, {
@@ -93,32 +124,47 @@ export default function FileCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger
-        className="bg-background rounded-md shadow-sm overflow-hidden group w-full h-full max-w-[330px] cursor-pointer border-primary/40 border"
+        className="bg-background rounded-md shadow-sm overflow-hidden group w-full h-full max-w-[330px] cursor-pointer border-primary/40 border relative"
         onClick={handleCardClick}
       >
-        <div className="block relative">
+        {/* 3-dot menu in top right */}
+        <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/80 hover:bg-background">
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {isDirectory ? (
+                <DropdownMenuItem onClick={handleOpen}>Open</DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={handleViewFile}>View</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownload}>Download</DropdownMenuItem>
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleToggleFavorite}>
+                <Star className={`h-4 w-4 mr-2 ${isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`} />
+                {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleRename}>Rename</DropdownMenuItem>
+              <DropdownMenuItem className="text-red-600" onClick={() => handleDelete()}>
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="block">
           <div className="w-full h-40 bg-muted flex items-center justify-center group-hover:opacity-80 transition-opacity">
             {isDirectory ? (
               <Folder className="w-16 h-16 text-yellow-500" />
             ) : (
               <File className="w-16 h-16 text-gray-400" />
             )}
-          </div>
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            {!isDirectory && (
-              <Button variant="ghost" size="icon" className="text-white" onClick={handleDownload}>
-                <Icons.DownloadIcon className="w-5 h-5" />
-                <span className="sr-only">Download</span>
-              </Button>
-            )}
-            <Button variant="ghost" size="icon" className="text-white" onClick={(e) => { e.stopPropagation(); handleRename(); }}>
-              <Icons.ShareIcon className="w-5 h-5" />
-              <span className="sr-only">Rename</span>
-            </Button>
-            <Button variant="ghost" size="icon" className="text-white" onClick={handleDelete}>
-              <Icons.TrashIcon className="w-5 h-5" />
-              <span className="sr-only">Delete</span>
-            </Button>
           </div>
         </div>
         <div className="p-4 space-y-2 text-muted-foreground text-sm">
@@ -134,7 +180,7 @@ export default function FileCard({
           </div>
         </div>
 
-        <ContextMenuContent className="w-48">
+        <ContextMenuContent className="w-56">
           {isDirectory ? (
             <ContextMenuItem onClick={handleOpen}>Open</ContextMenuItem>
           ) : (
@@ -143,6 +189,10 @@ export default function FileCard({
               <ContextMenuItem onClick={handleDownload}>Download</ContextMenuItem>
             </>
           )}
+          <ContextMenuItem onClick={handleToggleFavorite}>
+            <Star className={`h-4 w-4 mr-2 ${isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`} />
+            {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+          </ContextMenuItem>
           <ContextMenuItem onClick={handleRename}>Rename</ContextMenuItem>
           <ContextMenuItem className="text-red-600" onClick={() => handleDelete()}>Delete</ContextMenuItem>
         </ContextMenuContent>
