@@ -126,6 +126,9 @@ export async function initSearchService(): Promise<void> {
 }
 
 export async function extractText(fileBuffer: Buffer): Promise<string> {
+  const startTime = Date.now();
+  console.log(`[Search] Starting Tika text extraction (${fileBuffer.length} bytes)...`);
+
   try {
     const response = await fetch(`${TIKA_URL}/tika`, {
       method: "PUT",
@@ -136,14 +139,17 @@ export async function extractText(fileBuffer: Buffer): Promise<string> {
     });
 
     if (!response.ok) {
-      throw new Error(`Tika extraction failed: ${response.status}`);
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`Tika extraction failed: ${response.status} - ${errorText}`);
     }
 
     const text = await response.text();
+    console.log(`[Search] Tika extraction completed in ${Date.now() - startTime}ms (${text.length} chars extracted)`);
     return text.trim();
   } catch (error) {
-    console.error("Text extraction failed:", error);
-    return "";
+    console.error(`[Search] Text extraction failed after ${Date.now() - startTime}ms:`, error);
+    // Re-throw instead of returning empty string - let the caller handle it
+    throw error;
   }
 }
 
@@ -157,8 +163,10 @@ export interface IndexFileParams {
 }
 
 // OpenAI text-embedding-3-small has 8192 token limit
-// ~4 chars per token, so ~32k chars max. Use 30k to be safe.
-const MAX_CONTENT_CHARS = 30000;
+// Character-to-token ratio varies: ~4 for plain text, ~2.5 for PDFs with special chars
+// Using conservative estimate of 2.5 chars/token: 8192 * 2.5 = ~20k
+// Leave buffer for filename/path metadata: use 16k chars
+const MAX_CONTENT_CHARS = 16000;
 
 function truncateContent(content: string): string {
   if (content.length <= MAX_CONTENT_CHARS) {
@@ -175,6 +183,9 @@ async function ensureInitialized(): Promise<void> {
 }
 
 export async function indexFile(params: IndexFileParams): Promise<void> {
+  const startTime = Date.now();
+  console.log(`[Search] Starting indexFile for: ${params.path}`);
+
   await ensureInitialized();
   if (!client) {
     throw new Error("Search service not initialized");
@@ -184,19 +195,31 @@ export async function indexFile(params: IndexFileParams): Promise<void> {
     const collection = client.collections.get("File");
 
     // Check if file already exists and delete it first
+    console.log(`[Search] Checking for existing entry: ${params.path}`);
+    const queryStart = Date.now();
     const existing = await collection.query.fetchObjects({
       filters: collection.filter.byProperty("path").equal(params.path),
       limit: 1,
     });
+    console.log(`[Search] Query completed in ${Date.now() - queryStart}ms, found ${existing.objects.length} existing`);
 
     if (existing.objects.length > 0) {
+      console.log(`[Search] Deleting existing entry: ${existing.objects[0].uuid}`);
+      const deleteStart = Date.now();
       await collection.data.deleteById(existing.objects[0].uuid);
+      console.log(`[Search] Delete completed in ${Date.now() - deleteStart}ms`);
     }
 
     // Truncate content to fit within embedding model token limits
     const truncatedContent = truncateContent(params.content);
+    const wasTruncated = truncatedContent.length < params.content.length;
+    if (wasTruncated) {
+      console.log(`[Search] Content truncated from ${params.content.length} to ${truncatedContent.length} chars`);
+    }
 
     // Index the new/updated file
+    console.log(`[Search] Inserting into Weaviate (content: ${truncatedContent.length} chars)...`);
+    const insertStart = Date.now();
     await collection.data.insert({
       path: params.path,
       filename: params.filename,
@@ -205,15 +228,19 @@ export async function indexFile(params: IndexFileParams): Promise<void> {
       size: params.size,
       lastModified: params.lastModified,
     });
+    console.log(`[Search] Insert completed in ${Date.now() - insertStart}ms`);
 
-    console.log(`Indexed file: ${params.path}`);
+    console.log(`[Search] Indexed file: ${params.path} (total: ${Date.now() - startTime}ms)`);
   } catch (error) {
-    console.error(`Failed to index file ${params.path}:`, error);
+    console.error(`[Search] Failed to index file ${params.path} after ${Date.now() - startTime}ms:`, error);
     throw error;
   }
 }
 
 export async function deleteFromIndex(path: string): Promise<void> {
+  const startTime = Date.now();
+  console.log(`[Search] Starting deleteFromIndex for: ${path}`);
+
   await ensureInitialized();
   if (!client) {
     throw new Error("Search service not initialized");
@@ -223,17 +250,26 @@ export async function deleteFromIndex(path: string): Promise<void> {
     const collection = client.collections.get("File");
 
     // Find and delete by path
+    console.log(`[Search] Querying for entry to delete: ${path}`);
+    const queryStart = Date.now();
     const existing = await collection.query.fetchObjects({
       filters: collection.filter.byProperty("path").equal(path),
       limit: 1,
     });
+    console.log(`[Search] Query completed in ${Date.now() - queryStart}ms, found ${existing.objects.length}`);
 
     if (existing.objects.length > 0) {
+      console.log(`[Search] Deleting entry: ${existing.objects[0].uuid}`);
+      const deleteStart = Date.now();
       await collection.data.deleteById(existing.objects[0].uuid);
-      console.log(`Removed from index: ${path}`);
+      console.log(`[Search] Delete completed in ${Date.now() - deleteStart}ms`);
+      console.log(`[Search] Removed from index: ${path} (total: ${Date.now() - startTime}ms)`);
+    } else {
+      console.log(`[Search] No entry found to delete for: ${path}`);
     }
   } catch (error) {
-    console.error(`Failed to delete from index ${path}:`, error);
+    console.error(`[Search] Failed to delete from index ${path} after ${Date.now() - startTime}ms:`, error);
+    throw error; // Re-throw to let caller handle it
   }
 }
 

@@ -7,6 +7,7 @@ import {
   updateJobStatus,
   hasActiveJob,
   resetStaleProcessingItems,
+  getRecentJobs,
   BATCH_SIZE,
   MAX_RETRIES,
   type QueueItem,
@@ -21,8 +22,10 @@ let isRunning = false;
 let filesystem: S3Filesystem | null = null;
 let currentBackoffMs = 0;
 let consecutiveErrors = 0;
+let pollCount = 0;
+const STATUS_LOG_INTERVAL = 30; // Log status every N polls (with 2s poll = every 60s)
 
-// Detect if an error is retryable (rate limiting, temporary network issues)
+// Detect if an error is retryable (rate limiting, temporary network issues, fixable errors)
 function isRetryableError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const lowerMessage = message.toLowerCase();
@@ -41,6 +44,11 @@ function isRetryableError(error: unknown): boolean {
 
   // Service temporarily unavailable
   if (lowerMessage.includes("503") || lowerMessage.includes("502") || lowerMessage.includes("unavailable")) {
+    return true;
+  }
+
+  // Token limit errors - retryable because truncation limit may have been adjusted
+  if (lowerMessage.includes("maximum context length") || lowerMessage.includes("token")) {
     return true;
   }
 
@@ -64,40 +72,75 @@ function increaseBackoff(): void {
   console.log(`[Worker] Backing off for ${currentBackoffMs / 1000}s after ${consecutiveErrors} consecutive errors`);
 }
 
+function logQueueStatus(): void {
+  const jobs = getRecentJobs(5);
+  const pendingCount = getPendingFiles(1000).length; // Get count of pending items
+
+  console.log(`[Worker] === Status Report ===`);
+  console.log(`[Worker] Pending queue items: ${pendingCount}`);
+  console.log(`[Worker] Consecutive errors: ${consecutiveErrors}`);
+  console.log(`[Worker] Current backoff: ${currentBackoffMs}ms`);
+
+  for (const progress of jobs) {
+    const job = progress.job;
+    if (job && (job.status === "persistent" || job.status === "processing" || job.status === "pending")) {
+      console.log(`[Worker] Job ${job.id} (${job.job_type}): ${job.status} - pending: ${progress.pending}, processing: ${progress.processing}, completed: ${progress.completed}, failed: ${progress.failed}`);
+    }
+  }
+  console.log(`[Worker] ======================`);
+}
+
 async function processIndexOperation(queueItem: QueueItem): Promise<void> {
   if (!filesystem) {
     throw new Error("Filesystem not initialized");
   }
 
+  const startTime = Date.now();
+  const path = queueItem.file_path;
+
   // Get file content from S3
-  const fileContent = await filesystem.getObject(queueItem.file_path);
+  console.log(`[Worker] Fetching from S3: ${path}`);
+  const s3Start = Date.now();
+  const fileContent = await filesystem.getObject(path);
+  console.log(`[Worker] S3 fetch completed in ${Date.now() - s3Start}ms (${fileContent.data.length} bytes)`);
 
   // Extract text using Tika
+  console.log(`[Worker] Extracting text via Tika: ${path}`);
+  const tikaStart = Date.now();
   const extractedText = await extractText(fileContent.data);
+  console.log(`[Worker] Tika extraction completed in ${Date.now() - tikaStart}ms (${extractedText.length} chars)`);
 
   // Get filename from path
-  const filename = queueItem.file_path.split("/").pop() || queueItem.file_path;
+  const filename = path.split("/").pop() || path;
 
   // Index in Weaviate
+  console.log(`[Worker] Indexing in Weaviate: ${path}`);
+  const weaviateStart = Date.now();
   await indexFile({
-    path: queueItem.file_path,
+    path,
     filename,
     content: extractedText,
     mimeType: queueItem.mime_type || "application/octet-stream",
     size: queueItem.file_size,
     lastModified: new Date(),
   });
+  console.log(`[Worker] Weaviate indexing completed in ${Date.now() - weaviateStart}ms`);
 
-  console.log(`[Worker] Indexed: ${queueItem.file_path}`);
+  console.log(`[Worker] Indexed: ${path} (total: ${Date.now() - startTime}ms)`);
 }
 
 async function processDeleteOperation(queueItem: QueueItem): Promise<void> {
-  // Delete from Weaviate
-  await deleteFromIndex(queueItem.file_path);
-  console.log(`[Worker] Deleted from index: ${queueItem.file_path}`);
+  const startTime = Date.now();
+  const path = queueItem.file_path;
+
+  console.log(`[Worker] Deleting from Weaviate: ${path}`);
+  await deleteFromIndex(path);
+  console.log(`[Worker] Deleted from index: ${path} (${Date.now() - startTime}ms)`);
 }
 
 async function processFile(queueItem: QueueItem): Promise<boolean> {
+  console.log(`[Worker] Starting ${queueItem.operation} for: ${queueItem.file_path} (id: ${queueItem.id}, retry: ${queueItem.retry_count})`);
+
   // Mark as processing
   markFileProcessing(queueItem.id);
 
@@ -113,12 +156,18 @@ async function processFile(queueItem: QueueItem): Promise<boolean> {
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
     const retryable = isRetryableError(error);
 
     if (retryable) {
       increaseBackoff();
       const retriesLeft = MAX_RETRIES - queueItem.retry_count - 1;
       console.warn(`[Worker] Retryable error for ${queueItem.file_path} (${retriesLeft} retries left): ${errorMessage}`);
+    } else {
+      console.error(`[Worker] Non-retryable error for ${queueItem.file_path}:`, errorMessage);
+      if (errorStack) {
+        console.error(`[Worker] Stack trace:`, errorStack);
+      }
     }
 
     markFileFailed(queueItem.id, errorMessage, retryable);
@@ -163,6 +212,13 @@ async function checkAndUpdateJobStatus(): Promise<void> {
 }
 
 async function poll(): Promise<void> {
+  pollCount++;
+
+  // Log status periodically
+  if (pollCount % STATUS_LOG_INTERVAL === 0) {
+    logQueueStatus();
+  }
+
   // If we're in backoff, wait before processing
   if (currentBackoffMs > 0) {
     console.log(`[Worker] In backoff, waiting ${currentBackoffMs / 1000}s before next attempt...`);
@@ -179,6 +235,7 @@ async function poll(): Promise<void> {
     }
   } catch (error) {
     console.error("[Worker] Error during poll:", error);
+    console.error("[Worker] Error details:", error instanceof Error ? error.stack : String(error));
 
     // If poll itself throws, treat it as retryable and back off
     if (isRetryableError(error)) {

@@ -1,0 +1,35 @@
+{ # global options
+    admin off
+    persist_config off
+    auto_https off
+    log {
+        format console
+    }
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
+:{$PORT} { # site block, listens on $PORT environment variable
+    log {
+        format console
+    }
+
+    # Large file upload support
+    request_body {
+        max_size 1000MB
+    }
+
+    # Proxy frontend requests
+    reverse_proxy {$FRONTEND_HOST}
+
+    # Proxy API requests to backend (strips /api/ prefix)
+    handle_path /api/* {
+        reverse_proxy {$BACKEND_HOST} {
+            transport http {
+                read_timeout 1200s
+                write_timeout 1200s
+            }
+        }
+    }
+}

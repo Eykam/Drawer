@@ -9,6 +9,9 @@ import {
 } from "@aws-sdk/client-s3";
 import { Filesystem, DrawerFile, UploadFile } from "../../@types/Filesystem";
 
+// Timeout for S3 operations in milliseconds (1 minute)
+const S3_REQUEST_TIMEOUT = 60000;
+
 export class S3Filesystem extends Filesystem {
   private client: S3Client;
   private bucket: string;
@@ -23,6 +26,10 @@ export class S3Filesystem extends Filesystem {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
       },
+      requestHandler: {
+        requestTimeout: S3_REQUEST_TIMEOUT,
+        httpsAgent: { timeout: S3_REQUEST_TIMEOUT },
+      } as any, // AWS SDK typing issue
     });
     this.fileList = [];
   }
